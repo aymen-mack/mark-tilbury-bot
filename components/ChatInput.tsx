@@ -13,10 +13,10 @@ interface ChatInputProps {
 }
 
 const SUGGESTED_PROMPTS = [
-  "How do I start investing with just £100/month?",
-  "What are the best side hustles to make money online in 2024?",
-  "Explain compound interest and why it matters",
-  "How do I build passive income streams from scratch?",
+  "What exactly is the Digital Architect model?",
+  "How do I get my first client with no experience?",
+  "What skill should I pick to start?",
+  "How do I price my service and what should I charge?",
 ];
 
 interface ISpeechRecognition extends EventTarget {
@@ -191,7 +191,7 @@ export default function ChatInput({
       </div>
 
       <p className="text-center text-xs text-gray-700 mt-2">
-        Mark Tilbury AI · General financial knowledge · Not professional financial advice
+        Mark Tilbury AI · Digital Architect model · For entertainment purposes only
       </p>
     </div>
   );
