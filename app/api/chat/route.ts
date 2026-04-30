@@ -1,5 +1,5 @@
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 import Anthropic from "@anthropic-ai/sdk";
 import { VideoResult } from "@/types";
