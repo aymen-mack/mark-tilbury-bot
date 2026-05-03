@@ -245,9 +245,15 @@ export async function POST(request: Request) {
           const videosPromise = searchMarkTilburyVideos(lastUserMessage);
 
           const anthropicStream = client.messages.stream({
-            model: "claude-opus-4-6",
+            model: "claude-sonnet-4-6",
             max_tokens: 2048,
-            system: MARK_TILBURY_SYSTEM_PROMPT,
+            system: [
+              {
+                type: "text",
+                text: MARK_TILBURY_SYSTEM_PROMPT,
+                cache_control: { type: "ephemeral" },
+              },
+            ],
             messages: messages.map((m: { role: string; content: string }) => ({
               role: m.role as "user" | "assistant",
               content: m.content,
