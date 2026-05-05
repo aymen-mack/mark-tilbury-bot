@@ -6,8 +6,10 @@ import { useUser, UserButton } from "@clerk/nextjs";
 import Sidebar from "@/components/Sidebar";
 import MessageBubble from "@/components/MessageBubble";
 import ChatInput from "@/components/ChatInput";
+import OutOfCreditsModal from "@/components/OutOfCreditsModal";
 import { Chat, Message } from "@/types";
 import { Menu } from "lucide-react";
+import { MESSAGE_LIMIT } from "@/lib/constants";
 
 function getGreeting(firstName: string): string {
   const hour = new Date().getHours();
@@ -69,6 +71,8 @@ export default function Home() {
   const firstName = user?.firstName ?? "there";
   const greeting = useMemo(() => getGreeting(firstName), [firstName]);
 
+  const messagesUsed = (user?.publicMetadata?.messagesUsed as number) ?? 0;
+
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -76,6 +80,7 @@ export default function Home() {
   const [isThinking, setIsThinking] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [outOfCredits, setOutOfCredits] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -84,6 +89,13 @@ export default function Home() {
   useEffect(() => {
     chatsRef.current = chats;
   }, [chats]);
+
+  // Show modal immediately if already at limit on load
+  useEffect(() => {
+    if (user && messagesUsed >= MESSAGE_LIMIT) {
+      setOutOfCredits(true);
+    }
+  }, [user, messagesUsed]);
 
   // Load from localStorage once we know the userId
   useEffect(() => {
@@ -101,7 +113,6 @@ export default function Home() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
 
-  // Detect when user manually scrolls up
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -113,7 +124,6 @@ export default function Home() {
     return () => container.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Auto scroll only if user hasn't scrolled up
   useEffect(() => {
     if (userScrolledUpRef.current) return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -146,6 +156,12 @@ export default function Home() {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
 
+    // Client-side credit check — server also enforces this
+    if (messagesUsed >= MESSAGE_LIMIT) {
+      setOutOfCredits(true);
+      return;
+    }
+
     // ── 1. Resolve or create a chat ──────────────────────────────
     let chatId = activeChatId;
     const isNewChat = !chatId;
@@ -154,8 +170,7 @@ export default function Home() {
       chatId = uuidv4();
     }
 
-    // ── 2. Build the full message history NOW (before any state mutations)
-    //       using the always-fresh ref so we never send stale history.
+    // ── 2. Build message history from the always-fresh ref
     const previousMessages = chatsRef.current.find((c) => c.id === chatId)?.messages ?? [];
 
     const userMessage: Message = {
@@ -165,7 +180,6 @@ export default function Home() {
       timestamp: Date.now(),
     };
 
-    // What we send to the API: existing history + new user message
     const apiMessages = [...previousMessages, userMessage].map((m) => ({
       role: m.role,
       content: m.content,
@@ -194,11 +208,7 @@ export default function Home() {
       setChats((prev) =>
         prev.map((c) =>
           c.id === chatId
-            ? {
-                ...c,
-                messages: [...c.messages, userMessage, assistantMessage],
-                updatedAt: Date.now(),
-              }
+            ? { ...c, messages: [...c.messages, userMessage, assistantMessage], updatedAt: Date.now() }
             : c
         )
       );
@@ -220,6 +230,25 @@ export default function Home() {
         body: JSON.stringify({ messages: apiMessages }),
         signal: abortControllerRef.current.signal,
       });
+
+      // Out of credits — server rejected the request
+      if (response.status === 402) {
+        setOutOfCredits(true);
+        // Remove the optimistic messages we added
+        setChats((prev) =>
+          prev.map((c) => {
+            if (c.id !== chatId) return c;
+            return {
+              ...c,
+              messages: c.messages.filter(
+                (m) => m.id !== assistantMessageId && m.id !== userMessage.id
+              ),
+            };
+          })
+        );
+        setInput(trimmed);
+        return;
+      }
 
       if (!response.ok || !response.body) {
         throw new Error("Failed to connect to API");
@@ -258,11 +287,8 @@ export default function Home() {
                 })
               );
             }
-
             if (parsed.text) {
-              // First token received — stop the "thinking" indicator
               setIsThinking(false);
-
               setChats((prev) =>
                 prev.map((c) => {
                   if (c.id !== chatId) return c;
@@ -292,11 +318,7 @@ export default function Home() {
             ...c,
             messages: c.messages.map((m) =>
               m.id === assistantMessageId
-                ? {
-                    ...m,
-                    content:
-                      "Sorry, something went wrong. Please check your API key and try again.",
-                  }
+                ? { ...m, content: "Sorry, something went wrong. Please try again." }
                 : m
             ),
           };
@@ -307,8 +329,10 @@ export default function Home() {
       setIsThinking(false);
       setStreamingMessageId(null);
       abortControllerRef.current = null;
+      // Reload Clerk user so credit counter reflects the new count
+      await user?.reload();
     }
-  }, [input, isStreaming, activeChatId]);
+  }, [input, isStreaming, activeChatId, messagesUsed, user]);
 
   const stopStreaming = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -316,6 +340,17 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-[#171717] overflow-hidden">
+      {/* Out of credits overlay */}
+      <OutOfCreditsModal show={outOfCredits} />
+
+      {/* Mobile backdrop */}
+      {!sidebarCollapsed && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 z-40"
+          onClick={() => setSidebarCollapsed(true)}
+        />
+      )}
+
       <Sidebar
         chats={chats}
         activeChatId={activeChatId}
@@ -324,6 +359,8 @@ export default function Home() {
         onDeleteChat={deleteChat}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+        messagesUsed={messagesUsed}
+        messageLimit={MESSAGE_LIMIT}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -351,12 +388,9 @@ export default function Home() {
                 <img src="/mark-tilbury.jpg" alt="Mark Tilbury" className="w-full h-full object-cover" />
               </div>
               <div className="text-center">
-                <h2 className="text-xl font-semibold text-white mb-1">
-                  {greeting}
-                </h2>
+                <h2 className="text-xl font-semibold text-white mb-1">{greeting}</h2>
                 <p className="text-gray-400 text-sm max-w-sm">
-                  Ask me anything about making money online, investing, side
-                  hustles, or building long-term wealth.
+                  Ask me anything about making money online, investing, side hustles, or building long-term wealth.
                 </p>
               </div>
             </div>

@@ -2,7 +2,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 import Anthropic from "@anthropic-ai/sdk";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { VideoResult } from "@/types";
+import { MESSAGE_LIMIT } from "@/lib/constants";
 
 async function searchMarkTilburyVideos(query: string): Promise<VideoResult[]> {
   const apiKey = process.env.YOUTUBE_API_KEY;
@@ -228,6 +230,29 @@ Right: "Honestly? Just pick a skill. The skill matters less than you think right
 Keep it real. Keep it actionable. Keep it Mark.`;
 
 export async function POST(request: Request) {
+  // Auth check
+  const { userId } = await auth();
+  if (!userId) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  // Credit check
+  const clerk = await clerkClient();
+  const clerkUser = await clerk.users.getUser(userId);
+  const messagesUsed = (clerkUser.publicMetadata.messagesUsed as number) || 0;
+
+  if (messagesUsed >= MESSAGE_LIMIT) {
+    return new Response(JSON.stringify({ outOfCredits: true }), {
+      status: 402,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Increment before streaming to prevent race conditions
+  await clerk.users.updateUserMetadata(userId, {
+    publicMetadata: { messagesUsed: messagesUsed + 1 },
+  });
+
   try {
     const { messages } = await request.json();
 
