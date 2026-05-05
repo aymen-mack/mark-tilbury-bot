@@ -6,10 +6,16 @@ import { useUser, UserButton } from "@clerk/nextjs";
 import Sidebar from "@/components/Sidebar";
 import MessageBubble from "@/components/MessageBubble";
 import ChatInput from "@/components/ChatInput";
-import OutOfCreditsModal from "@/components/OutOfCreditsModal";
 import { Chat, Message } from "@/types";
 import { Menu } from "lucide-react";
 import { MESSAGE_LIMIT } from "@/lib/constants";
+
+const NAVBAR_MESSAGES = [
+  "You've been putting AI Mark to work — you're clearly serious about this.",
+  "Most people leave the webinar and do nothing. You're not that person.",
+  "AI Mark has done his part. Ready for the real thing?",
+  "You've gotten more out of this than most people ever will.",
+];
 
 function getGreeting(firstName: string): string {
   const hour = new Date().getHours();
@@ -73,6 +79,11 @@ export default function Home() {
 
   const messagesUsed = (user?.publicMetadata?.messagesUsed as number) ?? 0;
 
+  // Stable random message picked once on mount
+  const [outOfCreditsMessage] = useState(
+    () => NAVBAR_MESSAGES[Math.floor(Math.random() * NAVBAR_MESSAGES.length)]
+  );
+
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -90,12 +101,13 @@ export default function Home() {
     chatsRef.current = chats;
   }, [chats]);
 
-  // Show modal immediately if already at limit on load
+  // Check on initial user load only (returning users who are already at limit)
   useEffect(() => {
-    if (user && messagesUsed >= MESSAGE_LIMIT) {
+    if (user?.id && messagesUsed >= MESSAGE_LIMIT) {
       setOutOfCredits(true);
     }
-  }, [user, messagesUsed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Load from localStorage once we know the userId
   useEffect(() => {
@@ -156,21 +168,21 @@ export default function Home() {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
 
-    // Client-side credit check — server also enforces this
+    // Client-side credit check
     if (messagesUsed >= MESSAGE_LIMIT) {
       setOutOfCredits(true);
       return;
     }
 
+    // Track before sending so we know if this is the final allowed message
+    const isFinalMessage = messagesUsed + 1 >= MESSAGE_LIMIT;
+
     // ── 1. Resolve or create a chat ──────────────────────────────
     let chatId = activeChatId;
     const isNewChat = !chatId;
+    if (isNewChat) chatId = uuidv4();
 
-    if (isNewChat) {
-      chatId = uuidv4();
-    }
-
-    // ── 2. Build message history from the always-fresh ref
+    // ── 2. Build message history from always-fresh ref
     const previousMessages = chatsRef.current.find((c) => c.id === chatId)?.messages ?? [];
 
     const userMessage: Message = {
@@ -231,10 +243,8 @@ export default function Home() {
         signal: abortControllerRef.current.signal,
       });
 
-      // Out of credits — server rejected the request
       if (response.status === 402) {
         setOutOfCredits(true);
-        // Remove the optimistic messages we added
         setChats((prev) =>
           prev.map((c) => {
             if (c.id !== chatId) return c;
@@ -329,8 +339,11 @@ export default function Home() {
       setIsThinking(false);
       setStreamingMessageId(null);
       abortControllerRef.current = null;
-      // Reload Clerk user so credit counter reflects the new count
       await user?.reload();
+      // Show the CTA after a short delay so the final response renders first
+      if (isFinalMessage) {
+        setTimeout(() => setOutOfCredits(true), 800);
+      }
     }
   }, [input, isStreaming, activeChatId, messagesUsed, user]);
 
@@ -340,9 +353,6 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-[#171717] overflow-hidden">
-      {/* Out of credits overlay */}
-      <OutOfCreditsModal show={outOfCredits} />
-
       {/* Mobile backdrop */}
       {!sidebarCollapsed && (
         <div
@@ -365,19 +375,42 @@ export default function Home() {
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a]">
-          {sidebarCollapsed && (
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a] min-h-[52px]">
+          {!outOfCredits && sidebarCollapsed && (
             <button
               onClick={() => setSidebarCollapsed(false)}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-gray-400 hover:text-white transition-colors shrink-0"
             >
               <Menu size={18} />
             </button>
           )}
-          <h1 className="text-sm font-medium text-gray-300 flex-1">
-            {activeChat?.title ?? "Mark Tilbury AI"}
-          </h1>
-          <UserButton />
+
+          {outOfCredits ? (
+            /* Out-of-credits navbar box */
+            <div className="flex-1 flex items-center justify-between gap-3 min-w-0">
+              <div className="min-w-0">
+                <p className="text-xs text-gray-500 mb-0.5">You've used all {MESSAGE_LIMIT} free messages</p>
+                <p className="text-sm font-medium text-white truncate leading-tight">
+                  {outOfCreditsMessage}
+                </p>
+              </div>
+              <a
+                href="https://event.thewealthportal.com/join"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black text-xs font-bold px-4 py-2 rounded-xl transition-colors whitespace-nowrap"
+              >
+                Join the Wealth Portal →
+              </a>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-sm font-medium text-gray-300 flex-1 truncate">
+                {activeChat?.title ?? "Mark Tilbury AI"}
+              </h1>
+              <UserButton />
+            </>
+          )}
         </div>
 
         {/* Messages */}
@@ -409,14 +442,17 @@ export default function Home() {
           )}
         </div>
 
-        <ChatInput
-          value={input}
-          onChange={setInput}
-          onSend={sendMessage}
-          onStop={stopStreaming}
-          isStreaming={isStreaming}
-          disabled={false}
-        />
+        {/* Hide chat input when out of credits */}
+        {!outOfCredits && (
+          <ChatInput
+            value={input}
+            onChange={setInput}
+            onSend={sendMessage}
+            onStop={stopStreaming}
+            isStreaming={isStreaming}
+            disabled={false}
+          />
+        )}
       </div>
     </div>
   );
