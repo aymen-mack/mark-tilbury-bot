@@ -340,10 +340,7 @@ export default function Home() {
       setStreamingMessageId(null);
       abortControllerRef.current = null;
       await user?.reload();
-      // Show the CTA after a short delay so the final response renders first
-      if (isFinalMessage) {
-        setTimeout(() => setOutOfCredits(true), 800);
-      }
+      if (isFinalMessage) setOutOfCredits(true);
     }
   }, [input, isStreaming, activeChatId, messagesUsed, user]);
 
@@ -375,42 +372,19 @@ export default function Home() {
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a] min-h-[52px]">
-          {!outOfCredits && sidebarCollapsed && (
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a]">
+          {sidebarCollapsed && (
             <button
               onClick={() => setSidebarCollapsed(false)}
-              className="text-gray-400 hover:text-white transition-colors shrink-0"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               <Menu size={18} />
             </button>
           )}
-
-          {outOfCredits ? (
-            /* Out-of-credits navbar box */
-            <div className="flex-1 flex items-center justify-between gap-3 min-w-0">
-              <div className="min-w-0">
-                <p className="text-xs text-gray-500 mb-0.5">You've used all {MESSAGE_LIMIT} free messages</p>
-                <p className="text-sm font-medium text-white truncate leading-tight">
-                  {outOfCreditsMessage}
-                </p>
-              </div>
-              <a
-                href="https://event.thewealthportal.com/join"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black text-xs font-bold px-4 py-2 rounded-xl transition-colors whitespace-nowrap"
-              >
-                Join the Wealth Portal →
-              </a>
-            </div>
-          ) : (
-            <>
-              <h1 className="text-sm font-medium text-gray-300 flex-1 truncate">
-                {activeChat?.title ?? "Mark Tilbury AI"}
-              </h1>
-              <UserButton />
-            </>
-          )}
+          <h1 className="text-sm font-medium text-gray-300 flex-1 truncate">
+            {activeChat?.title ?? "Mark Tilbury AI"}
+          </h1>
+          <UserButton />
         </div>
 
         {/* Messages */}
@@ -442,8 +416,24 @@ export default function Home() {
           )}
         </div>
 
-        {/* Hide chat input when out of credits */}
-        {!outOfCredits && (
+        {outOfCredits ? (
+          <div className="w-full max-w-3xl mx-auto px-4 pb-5 pt-3">
+            <div className="flex items-center gap-3 bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl px-4 py-3">
+              <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+                <img src="/mark-tilbury.jpg" alt="Mark Tilbury" className="w-full h-full object-cover" />
+              </div>
+              <p className="text-sm text-gray-400 flex-1 leading-snug">{outOfCreditsMessage}</p>
+              <a
+                href="https://event.thewealthportal.com/join"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 bg-yellow-400 hover:bg-yellow-300 text-black text-xs font-bold px-4 py-2 rounded-xl transition-colors whitespace-nowrap"
+              >
+                Join the Wealth Portal →
+              </a>
+            </div>
+          </div>
+        ) : (
           <ChatInput
             value={input}
             onChange={setInput}
