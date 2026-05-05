@@ -10,9 +10,9 @@ import { Chat, Message } from "@/types";
 import { Menu } from "lucide-react";
 import { MESSAGE_LIMIT } from "@/lib/constants";
 
-const NAVBAR_MESSAGES = [
+const OUT_OF_CREDITS_MESSAGES = [
   "You've been putting AI Mark to work — you're clearly serious about this.",
-  "Most people leave the webinar and do nothing. You're not that person.",
+  "Most people leave the event and do nothing. You're not that person.",
   "AI Mark has done his part. Ready for the real thing?",
   "You've gotten more out of this than most people ever will.",
 ];
@@ -81,7 +81,7 @@ export default function Home() {
 
   // Stable random message picked once on mount
   const [outOfCreditsMessage] = useState(
-    () => NAVBAR_MESSAGES[Math.floor(Math.random() * NAVBAR_MESSAGES.length)]
+    () => OUT_OF_CREDITS_MESSAGES[Math.floor(Math.random() * OUT_OF_CREDITS_MESSAGES.length)]
   );
 
   const [chats, setChats] = useState<Chat[]>([]);
