@@ -164,6 +164,12 @@ export default function Home() {
     [activeChatId]
   );
 
+  const renameChat = useCallback((id: string, title: string) => {
+    setChats((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title } : c))
+    );
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
@@ -364,6 +370,7 @@ export default function Home() {
         onNewChat={createNewChat}
         onSelectChat={setActiveChatId}
         onDeleteChat={deleteChat}
+        onRenameChat={renameChat}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
         messagesUsed={messagesUsed}
