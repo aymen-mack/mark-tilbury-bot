@@ -191,7 +191,15 @@ export default function ChatInput({
       </div>
 
       <p className="text-center text-xs text-gray-700 mt-2">
-        Mark Tilbury AI · Digital Architect model · For entertainment purposes only
+        Mark Tilbury AI · Digital Architect model · For entertainment purposes only ·{" "}
+        <a
+          href="https://www.thewealthportal.com/terms-of-service"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-gray-500 transition-colors"
+        >
+          Terms of Service
+        </a>
       </p>
     </div>
   );
